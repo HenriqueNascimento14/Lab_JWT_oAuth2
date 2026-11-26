@@ -1,20 +1,17 @@
-# Declaração de Uso de IA — Avaliação A2
-
-- Nome: [Seu nome]
-- RA: [Seu RA]
+Declaração de Uso de IA — Avaliação A2
+- Nome: Henrique Silva do Nascimento
+- RA: 1710832413038
 - Tema: OAuth2 e JWT na Prática
-- Ferramenta: ChatGPT
-
-## Como a IA foi usada
-
-O ChatGPT leu o edital fornecido, interpretou o Tema 2 e gerou a implementação inicial do mini-laboratório em Spring Boot. Também elaborou os testes de integração, a coleção do Postman, o README e a versão inicial do relatório técnico.
-
-## Pedidos enviados
-
+- Ferramenta utilizada: ChatGPT
+  
+Como usei a IA
+Escolhi o Tema 2 e usei o ChatGPT para entender o que o edital pedia e montar o mini-laboratório da SocialConnect. O ChatGPT gerou a primeira versão do código em Spring Boot, os testes de integração, a coleção do Postman, o README e uma versão inicial do relatório técnico. Também usei a ferramenta para entender como o projeto funciona e tirar dúvidas durante os testes.
+Exemplos de pedidos que fiz
 - “haja como um estudante de spring boot”
 - “eu escolho tema 2”
-- “mande o projeto completo zippado”
+- “me explique o que vc fez”
+  
+O que testei e aprendi
+Testei a API manualmente no Postman, consegui entrar como operador e receber o accessToken e o refreshToken.
 
-## Revisão do estudante
-
-[Após executar o projeto, descreva o que você testou, quais partes revisou ou alterou e como verificou as explicações do relatório. Acrescente outros usos de IA, se houver.]
+Usei o accessToken para listar os beneficiários e confirmei que a API retornou os dois cadastros de exemplo. Em seguida, tentei excluir a beneficiária de ID 1 com o mesmo token e recebi 403 Forbidden. Esse teste me ajudou a entender a diferença entre autenticação e autorização. A API reconheceu minha conta de operador e permitiu a consulta. A exclusão foi bloqueada porque essa ação exige o perfil de administrador.
