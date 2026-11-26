@@ -1,77 +1,47 @@
 # Relatório técnico — OAuth2 e JWT na prática
 
-- Nome: [Seu nome]
-- RA: [Seu RA]
-- Data de entrega: 27/11/2026
+**Nome:** Henrique Silva do Nascimento  
+**RA:** 1710832413038  
+**Data de entrega:** 27/11/2026
 
 ## 1. Introdução
 
-A SocialConnect precisa diferenciar quem pode consultar um cadastro de quem pode excluir um beneficiário. Se as duas operações exigissem apenas que o usuário estivesse logado, qualquer conta com acesso à listagem poderia apagar registros. O laboratório investiga como o Spring Security verifica a identidade do usuário e aplica permissões diferentes a rotas da mesma API.
-
-O objetivo foi desenvolver um exemplo executável de login, verificação de JWT, renovação e logout. A demonstração usa dois perfis e registra o comportamento esperado em cada situação. A investigação teórica também apresenta o papel do OAuth2 e como um servidor de autorização se encaixaria na arquitetura da SocialConnect.
+Neste trabalho, usei a SocialConnect como exemplo para estudar como proteger rotas em uma API com Spring Boot. Escolhi uma situação simples: o operador precisa consultar os beneficiários, mas só o administrador pode excluir um cadastro. Para demonstrar essa diferença, o laboratório inclui login, controle de acesso por perfil, renovação de tokens e logout.
 
 ## 2. Investigação teórica
 
-### Autenticação, autorização e OAuth2
+**Autenticação** é quando o sistema verifica quem está tentando entrar. No projeto, isso acontece quando a API confere o usuário e a senha. **Autorização** é quando o sistema verifica o que aquela conta pode fazer. Por exemplo, um operador pode entrar normalmente e ainda assim ter a exclusão bloqueada.
 
-A autenticação verifica a identidade apresentada. No laboratório, ela ocorre no login, quando o servidor confere o usuário e a senha. A autorização verifica se essa identidade tem permissão para fazer uma ação. Um operador autenticado pode listar beneficiários, enquanto a exclusão exige o perfil de administrador.
+O **OAuth2** é um padrão que permite a um aplicativo receber acesso a determinados recursos. Nesse modelo, um servidor de autorização emite o token, e a API valida esse token antes de liberar o acesso. O **JWT** é um formato que pode ser usado para representar o token. No laboratório, a própria aplicação emite o JWT no login e usa o Spring Security para validá-lo. Um fluxo OAuth2 com servidor de autorização, como Authorization Code com PKCE, seria uma evolução do projeto. [RFC 6749](https://www.rfc-editor.org/rfc/rfc6749) · [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)
 
-O OAuth2 é um padrão de autorização. Em um caso de acesso delegado, o usuário autoriza um aplicativo cliente a acessar determinados recursos. O servidor de autorização emite os tokens. O servidor de recursos, que pode ser a própria API da SocialConnect, valida as credenciais recebidas nas requisições. As permissões delegadas podem ser representadas por escopos. Por exemplo, um cliente pode receber acesso para ler um recurso, enquanto a API verifica separadamente as permissões do usuário para executar a ação. [RFC 6749](https://www.rfc-editor.org/rfc/rfc6749)
+O **access token** é enviado no cabeçalho `Authorization: Bearer <token>` ao chamar uma rota protegida. No projeto, o JWT informa quem é o usuário, qual é o perfil dele e quando o token vence. A assinatura permite verificar se essas informações foram alteradas. Como o conteúdo do JWT pode ser lido, o projeto mantém senhas e outros dados sensíveis fora dele. [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519.html)
 
-Em uma aplicação web com um provedor externo, o fluxo Authorization Code com PKCE é uma opção para obter tokens. O cliente inicia o fluxo com um desafio derivado de um valor que guarda temporariamente. Ao trocar o código por tokens, ele apresenta o valor original. O servidor de autorização confere se corresponde ao desafio inicial, dificultando o uso de um código interceptado. O projeto didático emite tokens por endpoints próprios e usa o suporte de Resource Server do Spring Security para validá-los. A integração com um servidor de autorização OAuth2 fica como evolução do laboratório. [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) · [Spring Security — JWT Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html)
-
-### Access token e JWT
-
-O access token acompanha uma requisição protegida no cabeçalho `Authorization: Bearer <token>`. JWT é um formato para representar informações chamadas *claims*. Um JWT assinado na forma compacta tem três partes separadas por pontos, correspondentes ao cabeçalho, às informações e à assinatura. A assinatura permite verificar se o conteúdo foi alterado. As informações ficam codificadas e podem ser lidas por quem recebe o token, por isso o laboratório guarda apenas identificadores e permissões nele. [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519.html)
-
-A API usa `sub` para identificar a conta, `iss` para identificar o emissor, `iat` para registrar o instante da emissão e `exp` para delimitar a validade. A autorização usa a *claim* personalizada `authorities`. No exemplo, um access token válido pode ser conferido pela API sem consultar o armazenamento de refresh tokens. A contrapartida é que uma permissão registrada no JWT continua presente até a expiração daquele token. Isso afeta situações como a retirada de acesso de um funcionário. Um tempo de validade menor reduz a janela, mas aumenta a frequência de renovação.
-
-A assinatura HS256 usa uma chave compartilhada para emitir e validar. Ela atende ao exemplo porque uma única aplicação possui as duas responsabilidades. Se o sistema tiver um servidor de autorização e várias APIs, uma assinatura assimétrica permite que o emissor assine com a chave privada e que cada API valide com a chave pública. Nesse cenário, também é importante validar a audiência para aceitar somente tokens destinados à API que está recebendo a requisição. [Spring Security — JWT Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html)
-
-### Renovação, armazenamento e revogação
-
-O refresh token permite solicitar um novo access token sem repetir as credenciais a cada expiração. Como tem validade mais longa, precisa de proteção tanto durante a transmissão quanto no armazenamento. No laboratório, o refresh é um valor aleatório opaco. O cliente recebe o valor original no JSON, enquanto o servidor guarda somente o resumo SHA-256. Quando o cliente solicita a renovação, o servidor calcula o resumo do valor recebido e procura a sessão correspondente. Para uso real, as requisições devem trafegar por HTTPS e os tokens devem ficar fora de logs, URLs e código-fonte. [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)
-
-A cada renovação a aplicação cria outro refresh token e remove o registro anterior. Repetir o token antigo retorna 401. Em um sistema de produção, é possível manter a relação entre os tokens de uma mesma sessão para revogar o token ativo ao detectar a reutilização de um anterior. O laboratório faz a rotação de uso único e simula a revogação no logout. Ele descarta os registros antigos, portanto a recusa de um token já usado não revoga automaticamente a sessão que emitiu o sucessor. [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)
+O **refresh token** serve para conseguir um novo access token sem digitar a senha de novo. A API gera um valor aleatório e guarda apenas o seu hash em memória. A cada renovação, ela entrega um novo refresh token e invalida o anterior. Isso evita que o mesmo refresh seja usado duas vezes. [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)
 
 ## 3. Mini-laboratório implementado
 
-A aplicação foi organizada em um controlador de autenticação, um serviço de emissão de tokens, uma classe de configuração do Spring Security e um controlador de beneficiários. Com isso, as rotas tratam a entrada e a saída HTTP, enquanto o serviço concentra a lógica de validade e renovação. As contas de teste são criadas em memória, e suas senhas são armazenadas nesse ambiente com BCrypt. Os registros de beneficiários usam dados inventados e são recriados a cada inicialização.
+No `POST /auth/login`, o Spring Security confere as credenciais e a API devolve os dois tokens. O access token vale **cinco minutos** e a sessão de renovação vale **uma hora a partir do login**. O `POST /auth/refresh` troca os tokens. O `POST /auth/logout` invalida o refresh enviado, mas o access token já emitido continua válido até vencer.
 
-No login, o `AuthenticationManager` confere as credenciais antes da emissão dos tokens. O access token tem validade de cinco minutos. A sessão de refresh tem validade de uma hora a partir do login. Quando ele é renovado, a aplicação mantém o prazo original da sessão. A verificação e a troca do refresh ocorrem em uma operação sincronizada, o que impede que duas requisições simultâneas consumam com sucesso o mesmo token dentro da mesma instância do laboratório.
-
-Para acessar a listagem ou a exclusão, o cliente envia o JWT. O Spring Security confere a assinatura, a validade e o emissor. Depois, converte a lista `authorities` em permissões que podem ser usadas pela anotação `@PreAuthorize`. O método de exclusão começa assim.
+A regra de exclusão foi colocada diretamente no método responsável pela operação:
 
 ```java
 @DeleteMapping("/{id}")
 @PreAuthorize("hasRole('ADMIN')")
-public ResponseEntity<Void> excluir(@PathVariable long id) {
-    if (beneficiarios.remove(id) == null) {
-        return ResponseEntity.notFound().build();
-    }
-    return ResponseEntity.noContent().build();
-}
 ```
 
-A configuração ativa a segurança de métodos com `@EnableMethodSecurity`. O Spring avalia `hasRole('ADMIN')` usando a autoridade `ROLE_ADMIN`. Sem credenciais válidas, a API responde 401. Se a conta estiver autenticada, mas faltar a autoridade requerida, a resposta é 403. O código procura o beneficiário somente depois de autorizar o método. Com permissão, um ID existente gera 204, e um ID ausente gera 404. [Spring Security — Method Security](https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html)
+A primeira anotação indica a rota de exclusão. A segunda faz o Spring verificar se a conta tem perfil de administrador antes de executar o método. Se o token estiver ausente ou inválido, a API responde `401`. Se o token for válido, mas a conta não tiver permissão para excluir, responde `403`. Quando um administrador exclui um cadastro existente, a resposta é `204`, com o corpo vazio. [Spring Security — Method Security](https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html)
 
-A coleção Postman demonstra login, listagem, exclusão, renovação e revogação. Os testes automatizados exercitam a API por HTTP. Um caso verifica as credenciais, outro compara os perfis na exclusão, e o último confere a troca do refresh, a recusa do token anterior e a revogação no logout. Ao apresentar o trabalho, é possível demonstrar a diferença entre 401 e 403 rodando a mesma requisição com três condições de acesso.
+No Postman, fiz o login como operador e usei o access token para consultar os beneficiários. A API retornou os dois cadastros de exemplo. Depois tentei excluir o beneficiário de ID `1` com o mesmo token e recebi `403 Forbidden`. Esse foi o resultado esperado, porque o operador pode consultar os cadastros, mas a exclusão exige outro perfil. O projeto também inclui testes automatizados para o login, a exclusão por perfil, a renovação e a revogação do refresh token.
 
 ## 4. Conexão com a SocialConnect
 
-Na SocialConnect, a escolha de quem pode excluir precisa refletir as responsabilidades da equipe. O exemplo separa operador e administrador, mas os perfis reais dependeriam das regras do projeto. Uma organização poderia dar a leitura apenas a pessoas autorizadas em uma unidade. Nesse caso, verificar o perfil seria só parte da regra, pois a API também precisaria conferir a unidade à qual pertence o cadastro solicitado.
+Na SocialConnect, essa regra permite que uma pessoa consulte os cadastros para trabalhar sem ter permissão para apagá-los. No laboratório, as contas, os beneficiários e as sessões ficam em memória para facilitar a demonstração. Ao reiniciar a API, os dados de exemplo são restaurados e os tokens anteriores deixam de funcionar.
 
-A versão original do sistema poderia aproveitar as regras de autorização nos controladores ou serviços existentes, integrando a autenticação a um servidor de autorização. Se houvesse várias instâncias da aplicação, os dados de sessão e revogação precisariam ficar em armazenamento persistente e compartilhado. O laboratório usa uma chave temporária e memória local para simplificar a execução. Reiniciar a API invalida os tokens emitidos e repõe os beneficiários fictícios.
-
-A revogação no logout tem um efeito concreto. Ela impede novas renovações com o refresh revogado, enquanto o último access token pode funcionar até vencer. Se a SocialConnect precisar bloquear o acesso imediatamente em caso de desligamento ou comprometimento de conta, será necessário consultar um estado de revogação ou usar um modelo de validação que permita conferir o estado da autorização. O custo dessa decisão aparece em cada requisição que precisar fazer a consulta.
+Em uma versão usada de verdade, seria importante manter as sessões em um armazenamento persistente e usar HTTPS. Também seria necessário decidir se o logout deve aguardar os cinco minutos de validade do access token ou se o acesso precisa ser interrompido imediatamente.
 
 ## 5. Conclusão e aprendizados
 
-O laboratório reúne três decisões que podem ser testadas separadamente. A primeira é aceitar a identidade após validar as credenciais. A segunda é verificar se essa identidade tem acesso à operação pedida. A terceira é decidir por quanto tempo a sessão pode continuar e como encerrar a renovação. A exclusão de um beneficiário evidencia a importância da segunda decisão, pois é possível estar autenticado e receber 403 por falta de permissão.
-
-A próxima evolução técnica seria integrar a API a um servidor de autorização e repetir os mesmos testes de acesso. Isso permitiria comparar a emissão local de tokens com um fluxo de autorização completo e avaliar como lidar com troca de chaves, encerramento de sessões e permissões que mudam no decorrer do dia.
-
-[Antes da entrega, acrescente suas observações após executar a coleção e descreva o que você aprendeu ou faria diferente.]
+O teste que mais me ajudou a entender o tema foi usar o **mesmo token** para duas ações. Ele funcionou para listar os beneficiários, mas a exclusão devolveu `403`. Assim, consegui ver na prática que fazer login comprova quem está acessando, enquanto a permissão depende da ação que a pessoa quer realizar. Se eu continuasse o projeto, o próximo passo seria ligar a API a um servidor de autorização OAuth2 e repetir os testes.
 
 ## Referências
 
